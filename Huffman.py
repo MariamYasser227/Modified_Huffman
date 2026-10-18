@@ -1,7 +1,7 @@
 import heapq
 import json
 
-
+#Initialize a Node class to represent each node in the Huffman tree
 class Node:
     def __init__(self, symbol, freq):
         self.symbol = symbol
@@ -13,12 +13,13 @@ class Node:
         return self.freq < other.freq
 
 
+#calculate the probabilities of each symbol in the input
 def calculate_probabilities(data):
     total_length = len(data)
     frequencies = {}
     for symbol in data:
         if symbol in frequencies:
-            frequencies[symbol] = frequencies[symbol] + 1
+            frequencies[symbol] += 1
         else:
             frequencies[symbol] = 1
 
@@ -28,7 +29,7 @@ def calculate_probabilities(data):
 
     return probs
 
-
+#separate the symbols into two groups based on the probability limit
 def separate_freq_others(probs, limit):
     freq = {}
     others_dict = {}
@@ -44,6 +45,7 @@ def separate_freq_others(probs, limit):
     return freq, others_dict, others_total_prob
 
 
+#build the Huffman tree using a priority queue (min-heap) by adding nodes with the lowest frequencies until only one node remains
 def build_huffman_tree(probs):
     heap = []
     for symbol, prob in probs.items():
@@ -64,6 +66,7 @@ def build_huffman_tree(probs):
         return None
 
 
+#generate the Huffman codes by traversing the tree and assigning binary codes to each symbol
 def generate_huffman_codes(root):
     huffman_codes = {}
 
@@ -84,7 +87,7 @@ def generate_huffman_codes(root):
     traverse(root, "")
     return huffman_codes
 
-
+#assign the final codes to the symbols, including handling the "Others" group by the prefix code + the original binary representation of the symbol
 def get_final_encoding_map(huffman_codes, others_dict):
     final_map = {}
 
@@ -100,7 +103,7 @@ def get_final_encoding_map(huffman_codes, others_dict):
 
     return final_map
 
-#convert the bit string to bytes and return the bytes along with the padding count --> 8 bits
+#convert the bit string to bytes and return the bytes along with the padding count --> 8 bits, 
 def pack_bits(bit_string):
     remainder = len(bit_string) % 8
     if remainder != 0:
@@ -120,6 +123,7 @@ def pack_bits(bit_string):
     return bytes(bytes_list), padding_count
 
 
+#convert the bytes back to a bit string and remove the padding bits to start decoding the compressed data
 def unpack_bits(binary_data, padding_count):
     bit_string = ""
     for byte in binary_data:
@@ -132,6 +136,7 @@ def unpack_bits(binary_data, padding_count):
     return bit_string
 
 
+#compress the input file using the Huffman coding algorithm and save the compressed data to a binary file, including a header with the Huffman codes and padding count
 def compress(input_file, compressed_file, limit):
     with open(input_file, "r", encoding="utf-8") as f:
         data = f.read()
@@ -173,7 +178,7 @@ def compress(input_file, compressed_file, limit):
         f.write(header_bytes)
         f.write(binary_data)
 
-
+#reconstructing the original symbols from the bit string using the Huffman codes
 def decompress(compressed_file, decompressed_file):
     with open(compressed_file, "rb") as f:
         header_length_bytes = f.read(4)
