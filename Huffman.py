@@ -1,5 +1,6 @@
 import heapq
 import json
+import math
 
 #Initialize a Node class to represent each node in the Huffman tree
 class Node:
@@ -45,6 +46,24 @@ def separate_freq_others(probs, limit):
     return freq, others_dict, others_total_prob
 
 
+#generate binary mapping for symbols in the others group based on unique count
+def generate_others_mapping(others_dict):
+    num_unique = len(others_dict)
+    if num_unique == 0:
+        return {}, 0
+    if num_unique == 1:
+        bit_len = 1
+    else:
+        bit_len = math.ceil(math.log2(num_unique))
+    
+    others_map = {}
+    for idx, symbol in enumerate(others_dict.keys()):
+        binary_code = format(idx, f"0{bit_len}b")
+        others_map[symbol] = binary_code
+
+    return others_map, bit_len
+
+
 #build the Huffman tree using a priority queue (min-heap) by adding nodes with the lowest frequencies until only one node remains
 def build_huffman_tree(probs):
     heap = []
@@ -88,7 +107,7 @@ def generate_huffman_codes(root):
     return huffman_codes
 
 #assign the final codes to the symbols, including handling the "Others" group by the prefix code + the original binary representation of the symbol
-def get_final_encoding_map(huffman_codes, others_dict):
+def get_final_encoding_map(huffman_codes, others_map):
     final_map = {}
 
     for symbol, code in huffman_codes.items():
@@ -97,9 +116,8 @@ def get_final_encoding_map(huffman_codes, others_dict):
 
     if "Others" in huffman_codes:
         others_prefix = huffman_codes["Others"]
-        for symbol in others_dict.keys():
-            original_binary = format(ord(symbol), "08b")
-            final_map[symbol] = others_prefix + original_binary
+        for symbol, custom_binary in others_map.items():
+            final_map[symbol] = others_prefix + custom_binary
 
     return final_map
 
@@ -151,12 +169,15 @@ def compress(input_file, compressed_file, limit):
     for symbol, prob in freq.items():
         tree_probs[symbol] = prob
 
+    others_map = {}
+    others_bit_len = 0
     if others_total_prob > 0:
         tree_probs["Others"] = others_total_prob
+        others_map, others_bit_len = generate_others_mapping(others_dict)
 
     root = build_huffman_tree(tree_probs)
     huffman_codes = generate_huffman_codes(root)
-    final_map = get_final_encoding_map(huffman_codes, others_dict)
+    final_map = get_final_encoding_map(huffman_codes, others_map)
 
     bit_string = ""
     for symbol in data:
@@ -164,9 +185,13 @@ def compress(input_file, compressed_file, limit):
 
     binary_data, padding_count = pack_bits(bit_string)
 
+    reverse_others_map = {code: sym for sym, code in others_map.items()}
+
     header = {
         "huffman_codes": huffman_codes,
         "padding_count": padding_count,
+        "others_map": reverse_others_map,
+        "others_bit_len": others_bit_len,
     }
 
     header_json = json.dumps(header)
@@ -192,6 +217,8 @@ def decompress(compressed_file, decompressed_file):
 
     huffman_codes = header["huffman_codes"]
     padding_count = header["padding_count"]
+    reverse_others_map = header.get("others_map", {})
+    others_bit_len = header.get("others_bit_len", 0)
 
     bit_string = unpack_bits(binary_data, padding_count)
 
@@ -210,9 +237,9 @@ def decompress(compressed_file, decompressed_file):
         if current_code in reverse_huffman:
             symbol = reverse_huffman[current_code]
             if symbol == "Others":
-                ascii_bits = bit_string[i : i + 8]
-                i = i + 8
-                character = chr(int(ascii_bits, 2))
+                custom_bits = bit_string[i : i + others_bit_len]
+                i = i + others_bit_len
+                character = reverse_others_map[custom_bits]
                 decoded_text += character
             else:
                 decoded_text = decoded_text + symbol
@@ -226,4 +253,17 @@ def decompress(compressed_file, decompressed_file):
 if __name__ == "__main__":
     limit = float(input("Enter probability limit: "))
     compress("input.txt", "compressed.bin", limit)
+
+    with open("input.txt", "r", encoding="utf-8") as f:
+        text = f.read()
+
+    with open("compressed.bin", "rb") as f:
+        header_len = int.from_bytes(f.read(4), byteorder="big")
+        header_bytes = f.read(header_len)
+        data_bytes = f.read()
+
+    print("Compressed -> compressed.bin")
+    print("Original size  :", len(text.encode("utf-8")), "bytes")
+    print("Compressed data:", len(data_bytes), "bytes and", len(header_bytes) + 4, "bytes for header")
+
     decompress("compressed.bin", "decompressed.txt")
